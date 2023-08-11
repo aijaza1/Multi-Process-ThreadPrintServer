@@ -13,7 +13,7 @@
 #include <sys/wait.h>
 
 
-// struct for the semaphore
+// definition of a semaphore structure
 struct mySemaphore {
   int val;
   sem_t gate;
@@ -21,6 +21,7 @@ struct mySemaphore {
 };
 typedef struct mySemaphore mySemaphore;
 
+// definition of a printer structure
 typedef struct printer {
   int pid;
   int size;
@@ -28,7 +29,7 @@ typedef struct printer {
 }
 printer;
 
-// global variables to connect to shared memory
+// definition of global variables to connect to shared memory that will be used among processes/threads
 typedef struct global {
   int completedProducers;
   int bufferIndex;
@@ -40,12 +41,16 @@ typedef struct global {
   int numBytesCons;
   int numProducers;
 
+  // Semaphore instances for synchronization
   mySemaphore full_sem;
   mySemaphore empty_sem;
   mySemaphore binary_sem;
   mySemaphore safety;
+
+  // Array of printer jobs
   printer printerJobBuffer[30];
 
+  // Arrays to store process and thread identifiers
   pid_t producerChildId[100];
   pthread_t producerThreads[100];
   pthread_t consumerThreads[100];
@@ -53,6 +58,7 @@ typedef struct global {
 }
 global;
 
+// Global variables
 global * globalShared;
 int shmid;
 pid_t parent;
@@ -89,7 +95,7 @@ void mysem_init(struct mySemaphore * sem, int k) {
 
 }
 
-// wait function
+// wait function for semaphore
 void mysem_wait(struct mySemaphore * sem) {
   sem_wait( & sem -> gate);
   sem_wait( & sem -> mutex);
@@ -102,7 +108,7 @@ void mysem_wait(struct mySemaphore * sem) {
 
 }
 
-// post function
+// post function for semaphore
 void mysem_post(struct mySemaphore * sem) {
   sem_wait( & sem -> mutex);
 
@@ -121,6 +127,7 @@ void mysem_destroy(struct mySemaphore * sem) {
   sem_destroy( & sem -> mutex);
 }
 
+// Function to insert a printer job into the buffer
 //, global* buffer
 void insertbuffer(printer job) {
   if (globalShared -> bufferIndex < 30) {
@@ -132,6 +139,7 @@ void insertbuffer(printer job) {
   }
 }
 
+// Function to dequeue a printer job from the buffer
 printer dequeuebuffer() {
   if (globalShared -> bufferIndex > 0) {
     globalShared -> bufferIndex -= 1;
@@ -143,6 +151,7 @@ printer dequeuebuffer() {
   }
 }
 
+// producer function
 void producer() {
   printer job;
   job.pid = getpid();
@@ -182,6 +191,7 @@ void producer() {
   exit(0);
 }
 
+// Consumer function
 void * consumer(void * thread_n) {
   struct timespec end_time;
   int threadNum = * (int * ) thread_n;
@@ -219,6 +229,7 @@ void * consumer(void * thread_n) {
 
 }
 
+// Signal handler for termination
 void terminationH(int num) {
   int b, n;
 
@@ -240,6 +251,7 @@ void terminationH(int num) {
   exit(0);
 
 }
+
 
 int main(int argc, char * argv[]) {
   printf("Starting\n");
@@ -292,13 +304,17 @@ int main(int argc, char * argv[]) {
   totalWaitTime = 0;
   clock_gettime(CLOCK_REALTIME, & start);
 
-  // produce and consume
+  // Create producer processes
+  // Parent process creates producer processes using fork()
   int i;
   for (i = 0; i < numProcess; i++) {
     if (parent == getpid()) // create producer processes
       if (fork() == 0) { // child process do nothing
       }
   }
+  
+  // Parent process creates consumer threads
+  // Consumer threads are created using pthread_create()
   // parent process create the threads, consume, and join them
   if (parent == getpid()) {
     int s;
@@ -307,6 +323,9 @@ int main(int argc, char * argv[]) {
       pthread_create(consumerThread + s, NULL, consumer, consumerId + s);
     }
     threads = consumerThread;
+
+  // Join consumer threads
+  // Parent process waits for consumer threads to finish using pthread_join()
     int h;
     for (h = 0; h < numThread; h++)
       pthread_join(consumerThread[h], NULL);
